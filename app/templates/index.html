@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL AI Agent — вакансии HH.ru</title>
+  <style>
+    :root { --bg: #0f0f12; --card: #1a1a1f; --text: #e4e4e7; --muted: #71717a; --accent: #22d3ee; --border: #27272a; }
+    * { box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; background: var(--bg); color: var(--text); margin: 0; padding: 1rem; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.25rem; font-weight: 600; color: var(--accent); margin-bottom: 0.5rem; }
+    .sub { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.5rem; }
+    form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    input[type="text"] { flex: 1; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem; }
+    input[type="text"]::placeholder { color: var(--muted); }
+    button { background: var(--accent); color: var(--bg); border: none; padding: 0.75rem 1.25rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    button:hover { filter: brightness(1.1); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .result { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+    .sql { font-size: 0.8rem; color: var(--muted); white-space: pre-wrap; word-break: break-all; margin-bottom: 0.75rem; }
+    .error { color: #f87171; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    .loading { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SQL AI Agent</h1>
+    <p class="sub">Задайте вопрос по вакансиям HH.ru — агент сформирует SQL и покажет результат.</p>
+    <form id="form">
+      <input type="text" name="question" id="question" placeholder="Например: Топ-10 работодателей по количеству вакансий" required>
+      <button type="submit" id="btn">Выполнить</button>
+    </form>
+    <div id="out" class="result" style="display: none;"></div>
+  </div>
+  <script>
+    const form = document.getElementById('form');
+    const question = document.getElementById('question');
+    const btn = document.getElementById('btn');
+    const out = document.getElementById('out');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = question.value.trim();
+      if (!q) return;
+      out.style.display = 'block';
+      out.innerHTML = '<span class="loading">Выполняю запрос...</span>';
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.set('question', q);
+        const r = await fetch('/api/ask', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (data.error) {
+          out.innerHTML = '<span class="error">' + escapeHtml(data.error) + '</span>' +
+            (data.sql ? '<pre class="sql">' + escapeHtml(data.sql) + '</pre>' : '');
+        } else {
+          let html = '';
+          if (data.sql) html += '<pre class="sql">' + escapeHtml(data.sql) + '</pre>';
+          if (data.rows && data.rows.length) {
+            const keys = Object.keys(data.rows[0]);
+            html += '<table><thead><tr>' + keys.map(k => '<th>' + escapeHtml(k) + '</th>').join('') + '</tr></thead><tbody>';
+            data.rows.forEach(row => {
+              html += '<tr>' + keys.map(k => '<td>' + escapeHtml(String(row[k] ?? '')) + '</td>').join('') + '</tr>';
+            });
+            html += '</tbody></table><p class="sub">Строк: ' + data.rows.length + '</p>';
+          } else {
+            html += '<p class="muted">Нет строк в результате.</p>';
+          }
+          out.innerHTML = html;
+        }
+      } catch (err) {
+        out.innerHTML = '<span class="error">Ошибка: ' + escapeHtml(err.message) + '</span>';
+      }
+      btn.disabled = false;
+    });
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
